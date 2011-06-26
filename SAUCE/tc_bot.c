@@ -21,7 +21,15 @@
 /* Ethernet addresses are 6 bytes */
 #define ETHER_ADDR_LEN	6
 
+struct votekick_user 
+{
+	int count;
+	char nick[256];
+};
+
+
 char bot_nick[] = "leon";
+struct votekick_user votekick_list[10];
 
 /* Ethernet header */
 struct sniff_ethernet {
@@ -76,16 +84,106 @@ struct sniff_tcp {
 
 double t1, t2;
 
-void handle_command(char *command)
-{
-	printf("Command: %s\n", command);
-	
+void handle_command(char *command, char *args)
+{	
 	// clearbans command
 	if (strcmp(command, "!clearbans") == 0)
 	{
 		printf("Clearing bans...\n");
-		system("curl -d \"roomname=4chan&hash=HASH_HERE&ts=TIMESTAMP_HERE\" http://tinychat.com/clearbans > /dev/null");
+		system("curl -d \"roomname=ROOM_GOES_HERE&hash=HASH_GOES_HERE&ts=TIMESTAMP_GOES_HERE\" http://tinychat.com/clearbans");
 	}
+	
+	if (strcmp(command, "!t") == 0)
+	{
+		printf("Grabbing twitter info... for %s\n", args);
+		char __msg[9000];
+		sprintf(__msg, "curl -d \"mode=tw&var=%s\" http://192.168.2.9/tc/main.php", args);
+		printf("Calling command ... %s\n", __msg);
+		system(__msg);
+	}
+	
+	if (strcmp(command, "!votekick") == 0)
+	{
+		printf("Votekick for %s\n", args);
+		
+	 	int i;
+		int match = 0;
+		for (i = 0; i < 10; i++)
+		{
+			if (strcmp(args, votekick_list[i].nick) == 0)
+			{
+				votekick_list[i].count++;
+				char __msg[9000];
+				sprintf(__msg, "curl -d \"mode=normal&var=Votekick for '%s' is at %i votes.\" http://192.168.2.9/tc/main.php > /dev/null", votekick_list[i].nick, votekick_list[i].count);
+				printf("Calling command ... %s\n", __msg);
+				system(__msg);
+				match = 1;
+				break;
+			}
+		}
+		
+		if (match == 0)
+		{
+			printf("Creating new votekick for %s\n", args);
+			for (i=0; i<10; i++)
+			{
+				printf("%i - %i\n", i, votekick_list[i].count);
+				if (votekick_list[i].count == 0)
+				{
+					printf("Found open slot!\n");
+					char __msg[9000];
+					sprintf(votekick_list[i].nick, "%s", args);
+					votekick_list[i].count = 1;
+					sprintf(__msg, "curl -d \"mode=normal&var=Votekick for '%s' has begun!  Bwahaha!.\" http://192.168.2.9/tc/main.php > /dev/null", votekick_list[i].nick);
+					printf("Calling command ... %s\n", __msg);
+					system(__msg);
+					break;
+				}
+			}
+		}
+	}
+}
+
+void handle_message(char *message, char *sender)
+{
+	int i;
+	for (i=0; message[i] != '\0'; i++)
+		message[i] = (char)tolower(message[i]);
+	if (strstr(message, "khione"))
+	{
+		printf("Someone said Khione!\n");
+		char *greetings[3] = { "hey", "sup", "hello" };
+		int g;
+		for (g = 0; g < 3; g++)
+		{
+			if (strstr(message, greetings[g]))
+			{
+				printf("Someone said '%s khione'\n", greetings[g]);
+				char __msg[9000];
+				sprintf(__msg, "curl -d \"mode=normal&var=Hey, %s\" http://192.168.2.9/tc/main.php > /dev/null", sender);
+				system(__msg);
+			}
+		}
+	}
+	
+	char *cmd_split = strtok(message, " ");
+	char *command[25];
+	char *arguments[256];
+	int z = 0;
+	while (cmd_split != NULL)
+	{
+		if (z == 0)
+		{
+			strcpy(command, cmd_split);
+		}
+		if (z == 1)
+		{
+			strcpy(arguments, cmd_split);
+		}
+		cmd_split = strtok(NULL, ", ");
+		z++;
+	}
+	handle_command(command, arguments);
 }
 
 void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet)
@@ -313,6 +411,8 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 		fprintf(fp, "%s: %s\n\n", test_packet.name, nmsg);
 		fclose(fp);
 		
+		handle_message((char*)nmsg, (char*)test_packet.name);
+		
 		// look for commands!
 		char *cmd_split = strtok(nmsg, " ");
 		char _msg[] = "/msg";
@@ -330,7 +430,7 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 			if (z == 2)
 			{
 				// handle the command
-				handle_command(cmd_split);
+				handle_command(cmd_split, NULL);
 			}
 			cmd_split = strtok(NULL, ", ");
 			z++;
@@ -344,6 +444,15 @@ pcap_t *handle;
 
 int main(int argc, char **argv)
 {
+	int i;
+	for (i=0; i<10; i++)
+	{
+		if (votekick_list[i].count == -1)
+		{
+			votekick_list[i].count = -1;
+		}
+	}
+
 
 	char *dev = NULL;			/* capture device name */
 	char errbuf[PCAP_ERRBUF_SIZE];		/* error buffer */
