@@ -1,0 +1,4 @@
+*.o
+tc_packet_reader
+tc_bot
+tc_bot_log
